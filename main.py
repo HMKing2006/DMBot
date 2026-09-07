@@ -1,5 +1,3 @@
-# This example requires the 'message_content' intent.
-
 import discord
 from os import getenv
 from dotenv import load_dotenv
