@@ -1,0 +1,90 @@
+{
+  "character_name": null,
+  "class": null,
+  "level": 1,
+  "background": null,
+  "player_name": null,
+  "race": null,
+  "alignment": null,
+  "experience_points": 0,
+  "ability_scores": {
+    "strength": null,
+    "dexterity": null,
+    "constitution": null,
+    "intelligence": null,
+    "wisdom": null,
+    "charisma": null
+  },
+  "proficiency_bonus": 2,
+  "saving_throws": {
+    "strength": null,
+    "dexterity": null,
+    "constitution": null,
+    "intelligence": null,
+    "wisdom": null,
+    "charisma": null
+  },
+  "skills": {
+    "acrobatics": null,
+    "animal_handling": null,
+    "arcana": null,
+    "athletics": null,
+    "deception": null,
+    "history": null,
+    "insight": null,
+    "intimidation": null,
+    "investigation": null,
+    "medicine": null,
+    "nature": null,
+    "perception": null,
+    "performance": null,
+    "persuasion": null,
+    "religion": null,
+    "sleight_of_hand": null,
+    "stealth": null,
+    "survival": null
+  },
+  "armor_class": null,
+  "initiative": null,
+  "speed": null,
+  "hit_points": {
+    "maximum": null,
+    "current": null,
+    "temporary": 0
+  },
+  "hit_dice": null,
+  "death_saves": {
+    "successes": 0,
+    "failures": 0
+  },
+  "attacks_and_spellcasting": [],
+  "equipment": [],
+  "proficiencies": {
+    "armor": [],
+    "weapons": [],
+    "tools": []
+  },
+  "languages": [],
+  "personality_traits": [],
+  "ideals": [],
+  "bonds": [],
+  "flaws": [],
+  "features_and_traits": [],
+  "spellcasting": {
+    "spellcasting_ability": null,
+    "spell_save_dc": null,
+    "spell_attack_bonus": null,
+    "spells": []
+  },
+  "appearance": {
+    "age": null,
+    "height": null,
+    "weight": null,
+    "eyes": null,
+    "skin": null,
+    "hair": null
+  },
+  "backstory": null,
+  "allies_and_organizations": [],
+  "treasure": []
+}

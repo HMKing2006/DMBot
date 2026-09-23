@@ -1,16 +1,18 @@
 from litellm import completion
 from os import getenv
 
-setting_md = "books/md/the_wild_sheep_chase_v2.md"
-
-with open(setting_md, "r") as md:
-    setting_str = md.read()
-
-def query_llm(prompt, model="openai/gpt-5.6-luna", effort="none"):
+def query_llm(prompt, model="openai/gpt-5.6-luna", effort="none", json=False, json_blueprint=None):
+    type = "text"
+    if json:
+        if json_blueprint == None:
+            type = "json_object"
+        else:
+            type = "json_schema"
     response = completion(
     model=model,
     messages=[{"role": "user", "content": prompt}],
     stream=False,
-    reasoning_effort=effort
+    reasoning_effort=effort,
+    response_format={"type":type}
     )
     return response.choices[0].message.content
