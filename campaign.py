@@ -94,11 +94,11 @@ class Campaign:
         context = "\n\n".join(context)
         return llm.query_llm(context, effort=effort, json=json, json_blueprint=json_blueprint)
         
-
-c = Campaign()
-c.add_rules("books/DnD_BasicRules_2018.pdf")
-c.add_rules("books/Monster Manual.pdf")
-print("Rules uploaded!")
-c.add_lore("books/the_wild_sheep_chase_v2.pdf")
-print("Lore uploaded!")
-c.gen_character_skeleton()
+if __name__ == "__main__":
+    c = Campaign()
+    c.add_rules("books/DnD_BasicRules_2018.pdf")
+    c.add_rules("books/Monster Manual.pdf")
+    print("Rules uploaded!")
+    c.add_lore("books/the_wild_sheep_chase_v2.pdf")
+    print("Lore uploaded!")
+    c.gen_character_skeleton()

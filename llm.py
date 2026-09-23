@@ -2,6 +2,10 @@ from litellm import completion
 from os import getenv
 
 def query_llm(prompt, model="openai/gpt-5.6-luna", effort="none", json=False, json_blueprint=None):
+    if isinstance(prompt, str):
+        messages = [{"role": "user", "content": prompt}]
+    else:
+        messages = prompt
     type = "text"
     if json:
         if json_blueprint == None:
@@ -10,7 +14,7 @@ def query_llm(prompt, model="openai/gpt-5.6-luna", effort="none", json=False, js
             type = "json_schema"
     response = completion(
     model=model,
-    messages=[{"role": "user", "content": prompt}],
+    messages=messages,
     stream=False,
     reasoning_effort=effort,
     response_format={"type":type}
