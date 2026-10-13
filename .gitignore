@@ -1,3 +1,6 @@
 .DS_Store
 .env
 books/
+__pycache__/
+.venv/
+data/

@@ -2,103 +2,110 @@
 
 import chromadb
 import pathlib
+import json
+import random
 import re
 import llm
 import pymupdf4llm
 
-from discord.ui.item import C
+
+def roll(dice):
+    """Roll dice like '4d6' or 'd20' and report each die plus the total."""
+    count, sides = re.fullmatch(r"(\d*)d(\d+)", dice.strip().lower()).groups()
+    rolls = [random.randint(1, int(sides)) for _ in range(int(count or 1))]
+    return f"rolls={rolls} total={sum(rolls)}"
+
+
+def merge(base, changes):
+    """Recursively merge changes into base; non-dict values replace."""
+    for key, value in changes.items():
+        base[key] = merge(base[key], value) if isinstance(value, dict) and isinstance(base.get(key), dict) else value
+    return base
+
 
 class Campaign:
 
     def __init__(self, id=0):
-        self.path = f"data/{id}"
-        chroma_client = chromadb.PersistentClient(self.path)
+        self.id = id
+        self.path = pathlib.Path(f"data/{id}")
+        for folder in ("players", "drafts"):
+            (self.path / folder).mkdir(parents=True, exist_ok=True)
+        chroma_client = chromadb.PersistentClient(str(self.path))
         self.rules = chroma_client.get_or_create_collection("rules")
         self.lore = chroma_client.get_or_create_collection("lore")
+        skeleton_path = self.path / "character_skeleton.json"
+        self.character_skeleton = skeleton_path.read_text(encoding="utf-8") if skeleton_path.exists() else "{}"
+        self.tools = {
+            "roll": (roll, "Roll dice like '4d6' or 'd20'. Returns each die and the total.", {"dice": {"type": "string"}}),
+            "update_sheet": (
+                self.update_sheet,
+                "Merge changes into a player's character sheet. Nested objects merge; other values (including lists) replace.",
+                {"player_id": {"type": "string"}, "changes": {"type": "object"}},
+            ),
+        }
 
-
-    def _ingest(self, path, collection, max_chars = 500):
+    def _ingest(self, path, collection, max_chars=500):
         path = pathlib.Path(path)
-        if path.suffix == ".pdf":
-            text = pymupdf4llm.to_markdown(path)
-        else:
-            text = path.read_text(encoding="utf-8")
-        parts = re.split(r"^(#{1,3} .+)$", text, flags=re.MULTILINE)
-
+        text = pymupdf4llm.to_markdown(path) if path.suffix == ".pdf" else path.read_text(encoding="utf-8")
         chunks, header = [], ""
-        for part in parts:
+        for part in re.split(r"^(#{1,3} .+)$", text, flags=re.MULTILINE):
             if re.match(r"^#{1,3} ", part):
                 header = part.strip("# ").strip()
-            elif part.strip():
-                body = part.strip()
+            elif body := part.strip():
                 # long sections still need splitting
-                for i in range(0, len(body), max_chars):
-                    chunks.append((header, body[i:i + max_chars]))
-
-        name = pathlib.Path(path).stem
+                chunks += [(header, body[i:i + max_chars]) for i in range(0, len(body), max_chars)]
         collection.upsert(
             documents=[f"{h}\n\n{b}" if h else b for h, b in chunks],
-            ids=[f"{name}-{i}" for i in range(len(chunks))],
-            metadatas=[
-                {"source": name, "section": h}
-                for h, _ in chunks
-            ],
+            ids=[f"{path.stem}-{i}" for i in range(len(chunks))],
+            metadatas=[{"source": path.stem, "section": h} for h, _ in chunks],
         )
-    
-    def _search_collection(self, prompt, collection, memory_count=10):
-        output = []
 
-        results = collection.query(query_texts=[prompt], n_results=memory_count)
-        for i in range(len(results["documents"][0])):
-            metadata = results["metadatas"][0][i]
-            body_text = results["documents"][0][i]
-            output.append(f"**{metadata["source"]}-{metadata["section"]}**\n{body_text}")
-        
-        return "\n\n".join(output)
-            
+    def _search(self, prompt, collection):
+        results = collection.query(query_texts=[prompt], n_results=10)
+        return "\n\n".join(
+            f"**{meta['source']}-{meta['section']}**\n{doc}"
+            for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+        )
 
     def add_rules(self, path):
         self._ingest(path, self.rules)
-    
+
     def add_lore(self, path):
         self._ingest(path, self.lore)
-    
+
     def gen_character_skeleton(self):
-        skeleton = self.query("Give the skeleton of a character sheet in JSON format. Only fill in fields that are the same across all starting characters.", json=True)
-        with open(self.path + "/character_skeleton.json", "w") as skeleton_file:
-            skeleton_file.write(skeleton)
+        self.character_skeleton = self.query(
+            "Give the skeleton of a character sheet in JSON format. "
+            "Only fill in fields that are the same across all starting characters.",
+            as_json=True,
+        )
+        (self.path / "character_skeleton.json").write_text(self.character_skeleton, encoding="utf-8")
 
-    def query(self, prompt, effort="none", json=False, json_blueprint=None, read_rules = True, read_lore = True, memory_count=10):
-        '''
-        Queries an LLM with campaign context included and returns the model's response.
-        Only relevant parts of the lore and rules are retrieved as context.
+    def query(self, prompt, as_json=False, tools=None):
+        """Query the LLM with relevant rules and lore retrieved as context."""
+        context = f"# RULES:\n{self._search(prompt, self.rules)}\n\n# LORE:\n{self._search(prompt, self.lore)}\n\n{prompt}"
+        return llm.query_llm(context, as_json=as_json, tools=tools)
 
-        prompt (str): The prompt for the LLM to complete.
-        read_rules (bool): Whether to query the game's ruleset.
-        read_lore (bool): Whether to query the game's lore (campaign books and setting books).
-        memory_count (int): How many sections of the ruleset and lore should be read.
-            memory_count = 100 makes the model read 100 sections of the ruleset and
-            100 sections of lore, each section being 2000 characters or less.
-        
-        str: The model's response.
-        '''
-        context = []
-        if read_rules:
-            rules_context = self._search_collection(prompt, self.rules, memory_count=memory_count)
-            context.append(f"# RULES:\n{rules_context}")
-        if read_lore:
-            lore_context = self._search_collection(prompt, self.lore, memory_count=memory_count)
-            context.append(f"# LORE:\n{lore_context}")
-        context.append(prompt)
+    def sheet_path(self, player_id):
+        """A finished sheet in players/, otherwise the draft in drafts/."""
+        done = self.path / "players" / f"{player_id}.json"
+        return done if done.exists() else self.path / "drafts" / f"{player_id}.json"
 
-        context = "\n\n".join(context)
-        return llm.query_llm(context, effort=effort, json=json, json_blueprint=json_blueprint)
-        
-if __name__ == "__main__":
-    c = Campaign()
-    c.add_rules("books/DnD_BasicRules_2018.pdf")
-    c.add_rules("books/Monster Manual.pdf")
-    print("Rules uploaded!")
-    c.add_lore("books/the_wild_sheep_chase_v2.pdf")
-    print("Lore uploaded!")
-    c.gen_character_skeleton()
+    def sheet(self, player_id):
+        return json.loads(self.sheet_path(player_id).read_text(encoding="utf-8"))
+
+    def get_players(self):
+        """Discord ids (as strings) of players with finished sheets."""
+        return [path.stem for path in (self.path / "players").glob("*.json")]
+
+    def start_character(self, player_id):
+        (self.path / "drafts" / f"{player_id}.json").write_text(self.character_skeleton, encoding="utf-8")
+
+    def update_sheet(self, player_id, changes):
+        sheet = merge(self.sheet(player_id), changes)
+        self.sheet_path(player_id).write_text(json.dumps(sheet, indent=2), encoding="utf-8")
+        return "Saved."
+
+    def finish_character(self, player_id):
+        self.sheet_path(player_id).rename(self.path / "players" / f"{player_id}.json")
+        return "Character finished."
