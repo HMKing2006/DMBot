@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import discord
+import prompts
 from os import getenv
 from dotenv import load_dotenv
 from campaign import Campaign
@@ -13,16 +14,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 client = discord.Client(intents=intents)
-
-CREATION_PROMPT = (
-    "You are the dungeon master, helping player {player_id} create a character over DM. "
-    "If the conversation is empty, open with a short thematic introduction to the campaign. "
-    "Ask one simple question at a time. Use your tools to roll dice when the rules call for it "
-    "and save every answer to the sheet as you go. When the sheet is complete, show the player "
-    "a summary and ask them to confirm; call finish_character only after they confirm.\n\n"
-    "Sheet: {sheet}\n\nConversation:\n{transcript}"
-)
-
 
 @functools.cache
 def get_campaign(guild_id):
@@ -42,7 +33,7 @@ async def transcript(channel, limit, keep=lambda _: True):
 
 async def creation_turn(campaign, user, dm_channel):
     """Run one character-creation exchange; announce the character once finished."""
-    prompt = CREATION_PROMPT.format(
+    prompt = prompts.CHARACTER_CREATION.format(
         player_id=user.id, sheet=json.dumps(campaign.sheet(user.id)), transcript=await transcript(dm_channel, 20)
     )
     tools = {**campaign.tools, "finish_character": (
@@ -52,7 +43,7 @@ async def creation_turn(campaign, user, dm_channel):
         await dm_channel.send(reply)
     if str(user.id) in campaign.get_players() and (channel := default_channel(client.get_guild(campaign.id))):
         intro = await asyncio.to_thread(
-            campaign.query, f"Introduce this new character to the party in a few sentences: {campaign.sheet(user.id)}"
+            campaign.query, prompts.CHARACTER_INTRO.format(sheet=json.dumps(campaign.sheet(user.id)))
         )
         await channel.send(f"{user.mention} joins the party!\n{intro}")
 
@@ -77,7 +68,7 @@ async def on_guild_join(guild):
     campaign = await asyncio.to_thread(load_campaign, guild.id)
     print(f"Joined {guild.name}")
     if channel := default_channel(guild):
-        await channel.send(await asyncio.to_thread(campaign.query, "Write a campaign hook to set the stage."))
+        await channel.send(await asyncio.to_thread(campaign.query, prompts.CAMPAIGN_OPENING))
 
 
 @client.event
@@ -96,10 +87,9 @@ async def on_message(message):
     campaign = get_campaign(message.guild.id)
     players = campaign.get_players()
     if str(message.author.id) in players:
-        log = await transcript(message.channel, 10, lambda m: str(m.author.id) in players or m.author == client.user)
-        prompt = (
-            "Continue the scene as the dungeon master. Use your tools to roll dice and keep sheets current.\n\n"
-            f"Player sheets: {json.dumps({p: campaign.sheet(p) for p in players})}\n\n{log}"
+        prompt = prompts.GAMEPLAY.format(
+            sheets=json.dumps({p: campaign.sheet(p) for p in players}),
+            transcript=await transcript(message.channel, 10, lambda m: str(m.author.id) in players or m.author == client.user),
         )
         if reply := await asyncio.to_thread(campaign.query, prompt, tools=campaign.tools):
             await message.channel.send(reply)

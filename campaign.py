@@ -7,6 +7,7 @@ import random
 import re
 import llm
 import pymupdf4llm
+import prompts
 
 
 def roll(dice):
@@ -74,11 +75,7 @@ class Campaign:
         self._ingest(path, self.lore)
 
     def gen_character_skeleton(self):
-        self.character_skeleton = self.query(
-            "Give the skeleton of a character sheet in JSON format. "
-            "Only fill in fields that are the same across all starting characters.",
-            as_json=True,
-        )
+        self.character_skeleton = self.query(prompts.CHARACTER_SKELETON, as_json=True)
         (self.path / "character_skeleton.json").write_text(self.character_skeleton, encoding="utf-8")
 
     def query(self, prompt, as_json=False, tools=None):
