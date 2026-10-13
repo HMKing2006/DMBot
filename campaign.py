@@ -9,6 +9,8 @@ import llm
 import pymupdf4llm
 import prompts
 
+# Chroma collection name -> chunks retrieved per query.
+COLLECTIONS = {"rules": 10, "lore": 10, "monsters": 5}
 
 def roll(dice):
     """Roll dice like '4d6' or 'd20' and report each die plus the total."""
@@ -32,8 +34,7 @@ class Campaign:
         for folder in ("players", "drafts"):
             (self.path / folder).mkdir(parents=True, exist_ok=True)
         chroma_client = chromadb.PersistentClient(str(self.path))
-        self.rules = chroma_client.get_or_create_collection("rules")
-        self.lore = chroma_client.get_or_create_collection("lore")
+        self.collections = {name: chroma_client.get_or_create_collection(name) for name in COLLECTIONS}
         skeleton_path = self.path / "character_skeleton.json"
         self.character_skeleton = skeleton_path.read_text(encoding="utf-8") if skeleton_path.exists() else "{}"
         self.tools = {
@@ -61,27 +62,26 @@ class Campaign:
             metadatas=[{"source": path.stem, "section": h} for h, _ in chunks],
         )
 
-    def _search(self, prompt, collection):
-        results = collection.query(query_texts=[prompt], n_results=10)
+    def _search(self, prompt, name):
+        results = self.collections[name].query(query_texts=[prompt], n_results=COLLECTIONS[name])
         return "\n\n".join(
             f"**{meta['source']}-{meta['section']}**\n{doc}"
             for doc, meta in zip(results["documents"][0], results["metadatas"][0])
         )
 
-    def add_rules(self, path):
-        self._ingest(path, self.rules)
-
-    def add_lore(self, path):
-        self._ingest(path, self.lore)
+    def add(self, name, path):
+        """Ingest a book into a collection named in COLLECTIONS."""
+        self._ingest(path, self.collections[name])
 
     def gen_character_skeleton(self):
         self.character_skeleton = self.query(prompts.CHARACTER_SKELETON, as_json=True)
         (self.path / "character_skeleton.json").write_text(self.character_skeleton, encoding="utf-8")
 
-    def query(self, prompt, as_json=False, tools=None):
-        """Query the LLM with relevant rules and lore retrieved as context."""
-        context = f"# RULES:\n{self._search(prompt, self.rules)}\n\n# LORE:\n{self._search(prompt, self.lore)}\n\n{prompt}"
-        return llm.query_llm(context, as_json=as_json, tools=tools)
+    def query(self, prompt, as_json=False, tools=None, search=None):
+        """Query the LLM with book sections relevant to search (default: the prompt) as context."""
+        search = (search or prompt)[-1000:]  # the embedder only reads ~256 tokens, so keep the most recent text
+        context = [f"# {name.upper()}:\n{self._search(search, name)}" for name in COLLECTIONS]
+        return llm.query_llm("\n\n".join(context + [prompt]), as_json=as_json, tools=tools)
 
     def sheet_path(self, player_id):
         """A finished sheet in players/, otherwise the draft in drafts/."""

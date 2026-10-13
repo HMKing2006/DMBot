@@ -33,13 +33,12 @@ async def transcript(channel, limit, keep=lambda _: True):
 
 async def creation_turn(campaign, user, dm_channel):
     """Run one character-creation exchange; announce the character once finished."""
-    prompt = prompts.CHARACTER_CREATION.format(
-        player_id=user.id, sheet=json.dumps(campaign.sheet(user.id)), transcript=await transcript(dm_channel, 20)
-    )
+    log = await transcript(dm_channel, 20)
+    prompt = prompts.CHARACTER_CREATION.format(player_id=user.id, sheet=json.dumps(campaign.sheet(user.id)), transcript=log)
     tools = {**campaign.tools, "finish_character": (
         lambda: campaign.finish_character(user.id), "Mark the character finished once the player confirms.", {},
     )}
-    if reply := await asyncio.to_thread(campaign.query, prompt, tools=tools):
+    if reply := await asyncio.to_thread(campaign.query, prompt, tools=tools, search=log):
         await dm_channel.send(reply)
     if str(user.id) in campaign.get_players() and (channel := default_channel(client.get_guild(campaign.id))):
         intro = await asyncio.to_thread(
@@ -51,9 +50,9 @@ async def creation_turn(campaign, user, dm_channel):
 def load_campaign(guild_id):
     """Ingest the default books and build a character skeleton."""
     campaign = get_campaign(guild_id)
-    campaign.add_lore("books/the_wild_sheep_chase_v2.pdf")
-    campaign.add_rules("books/DnD_BasicRules_2018.pdf")
-    campaign.add_rules("books/Monster Manual.pdf")
+    campaign.add("lore", "books/the_wild_sheep_chase_v2.pdf")
+    campaign.add("rules", "books/DnD_BasicRules_2018.pdf")
+    campaign.add("monsters", "books/Monster Manual.pdf")
     campaign.gen_character_skeleton()
     return campaign
 
@@ -87,11 +86,9 @@ async def on_message(message):
     campaign = get_campaign(message.guild.id)
     players = campaign.get_players()
     if str(message.author.id) in players:
-        prompt = prompts.GAMEPLAY.format(
-            sheets=json.dumps({p: campaign.sheet(p) for p in players}),
-            transcript=await transcript(message.channel, 10, lambda m: str(m.author.id) in players or m.author == client.user),
-        )
-        if reply := await asyncio.to_thread(campaign.query, prompt, tools=campaign.tools):
+        log = await transcript(message.channel, 10, lambda m: str(m.author.id) in players or m.author == client.user)
+        prompt = prompts.GAMEPLAY.format(sheets=json.dumps({p: campaign.sheet(p) for p in players}), transcript=log)
+        if reply := await asyncio.to_thread(campaign.query, prompt, tools=campaign.tools, search=log):
             await message.channel.send(reply)
     elif not drafts:
         campaign.start_character(message.author.id)
