@@ -10,7 +10,7 @@ import pymupdf4llm
 import prompts
 
 # Chroma collection name -> chunks retrieved per query.
-COLLECTIONS = {"rules": 10, "lore": 10, "monsters": 5}
+COLLECTIONS = {"rules": 5, "lore": 6, "monsters": 3}
 
 def roll(dice):
     """Roll dice like '4d6' or 'd20' and report each die plus the total."""
@@ -77,11 +77,11 @@ class Campaign:
         self.character_skeleton = self.query(prompts.CHARACTER_SKELETON, as_json=True)
         (self.path / "character_skeleton.json").write_text(self.character_skeleton, encoding="utf-8")
 
-    def query(self, prompt, as_json=False, tools=None, search=None):
+    def query(self, prompt, as_json=False, tools=None, search=None, effort="none"):
         """Query the LLM with book sections relevant to search (default: the prompt) as context."""
         search = (search or prompt)[-1000:]  # the embedder only reads ~256 tokens, so keep the most recent text
         context = [f"# {name.upper()}:\n{self._search(search, name)}" for name in COLLECTIONS]
-        return llm.query_llm("\n\n".join(context + [prompt]), as_json=as_json, tools=tools)
+        return llm.query_llm("\n\n".join(context + [prompt]), effort=effort, as_json=as_json, tools=tools)
 
     def sheet_path(self, player_id):
         """A finished sheet in players/, otherwise the draft in drafts/."""

@@ -88,7 +88,7 @@ async def on_message(message):
     if str(message.author.id) in players:
         log = await transcript(message.channel, 10, lambda m: str(m.author.id) in players or m.author == client.user)
         prompt = prompts.GAMEPLAY.format(sheets=json.dumps({p: campaign.sheet(p) for p in players}), transcript=log)
-        if reply := await asyncio.to_thread(campaign.query, prompt, tools=campaign.tools, search=log):
+        if reply := await asyncio.to_thread(campaign.query, prompt, tools=campaign.tools, search=log, effort="low"):
             await message.channel.send(reply)
     elif not drafts:
         campaign.start_character(message.author.id)
